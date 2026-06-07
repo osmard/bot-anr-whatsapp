@@ -108,7 +108,7 @@ app.get('/send-test', async (req, res) => {
   try {
     await Promise.race([
       sockRef.sendMessage(activeGroupJid, { text: texto }),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout 15s')), 15000)),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout 60s')), 60000)),
     ]);
     res.json({ ok: true, enviado: texto });
   } catch (err) {
@@ -316,7 +316,7 @@ async function connect() {
       const ciRaw = match[1];
       console.log(`🔍 CI detectada: ${ciRaw} | Grupo: ${jid}`);
 
-      const sendWithTimeout = (payload, ms = 15000) =>
+      const sendWithTimeout = (payload, ms = 60000) =>
         Promise.race([
           sock.sendMessage(jid, payload),
           new Promise((_, rej) => setTimeout(() => rej(new Error(`sendMessage timeout ${ms}ms`)), ms)),
