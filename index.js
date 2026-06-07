@@ -274,21 +274,28 @@ async function connect() {
       const ciRaw = match[1];
       console.log(`🔍 CI detectada: ${ciRaw} | Grupo: ${jid}`);
 
+      const sendWithTimeout = (payload, ms = 15000) =>
+        Promise.race([
+          sock.sendMessage(jid, payload),
+          new Promise((_, rej) => setTimeout(() => rej(new Error(`sendMessage timeout ${ms}ms`)), ms)),
+        ]);
+
       try {
         const resultados = await consultarCI(ciRaw);
         const respuesta  = resultados
           .map((a, i) => buildMessage(a, resultados.length, i))
           .join('\n');
-        await sock.sendMessage(jid, { text: respuesta });
+        console.log(`📤 Enviando respuesta para CI ${ciRaw}...`);
+        await sendWithTimeout({ text: respuesta });
         console.log(`✅ Respuesta enviada para CI ${ciRaw}`);
       } catch (err) {
-        console.error(`❌ Error procesando CI ${ciRaw}:`, err.message);
+        console.error(`❌ Error CI ${ciRaw}: ${err.message}`);
         try {
-          await sock.sendMessage(jid, {
+          await sendWithTimeout({
             text: `❌ CI ${ciRaw.replace(/\./g, '')} no encontrada en el padrón ANR.`,
           });
         } catch (sendErr) {
-          console.error(`❌ sendMessage también falló:`, sendErr.message);
+          console.error(`❌ sendMessage falló: ${sendErr.message}`);
         }
       }
     }
