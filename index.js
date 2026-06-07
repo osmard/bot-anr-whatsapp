@@ -286,21 +286,27 @@ function startClient() {
     const ciRaw = match[1];
     console.log(`🔍 CI detectada: ${ciRaw} | Grupo: ${chatId}`);
 
+    const send = async (text) => {
+      try {
+        await msg.reply(text);
+      } catch {
+        await clientRef.sendMessage(chatId, text);
+      }
+    };
+
     try {
       const resultados = await consultarCI(ciRaw);
       const respuesta  = resultados
         .map((a, i) => buildMessage(a, resultados.length, i))
         .join('\n');
       console.log(`📤 Enviando respuesta para CI ${ciRaw}...`);
-      await msg.reply(respuesta);
+      await send(respuesta);
       console.log(`✅ Respuesta enviada para CI ${ciRaw}`);
     } catch (err) {
       console.error(`❌ Error CI ${ciRaw}: ${err.message}`);
-      try {
-        await msg.reply(`❌ CI ${ciRaw.replace(/\./g, '')} no encontrada en el padrón ANR.`);
-      } catch (e) {
-        console.error(`❌ reply falló: ${e.message}`);
-      }
+      await send(`❌ CI ${ciRaw.replace(/\./g, '')} no encontrada en el padrón ANR.`).catch(e =>
+        console.error(`❌ send falló: ${e.message}`)
+      );
     }
   };
 
