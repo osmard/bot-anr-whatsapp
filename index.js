@@ -69,6 +69,30 @@ app.get('/status', (req, res) => {
   res.json({ connected: botConnected, group: activeGroupJid });
 });
 
+// Info del grupo activo (incluye restrict/announce)
+app.get('/group-info', async (req, res) => {
+  if (!botConnected || !sockRef || !activeGroupJid) return res.status(503).json({ error: 'Bot no conectado o sin grupo' });
+  const meta = await sockRef.groupMetadata(activeGroupJid);
+  res.json({ name: meta.subject, announce: meta.announce, restrict: meta.restrict, size: meta.participants.length });
+});
+
+// Enviar mensaje a un JID directo (para test)
+app.get('/send-direct', async (req, res) => {
+  if (!botConnected || !sockRef) return res.status(503).json({ error: 'Bot no conectado' });
+  const to  = req.query.to;
+  const msg = req.query.msg || 'Test bot ANR';
+  if (!to) return res.status(400).json({ error: 'Parámetro ?to= requerido (número@s.whatsapp.net)' });
+  try {
+    await Promise.race([
+      sockRef.sendMessage(to, { text: msg }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout 60s')), 60000)),
+    ]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Listar todos los grupos disponibles
 app.get('/groups', async (req, res) => {
   if (!botConnected || !sockRef) return res.status(503).json({ error: 'Bot no conectado aún' });
