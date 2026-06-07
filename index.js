@@ -20,6 +20,7 @@ const CI_REGEX   = /\bci[:\s]*([0-9][.0-9]*[0-9]+)/i;
 
 let activeGroupJid = process.env.GROUP_JID || null;
 let botConnected   = false;
+let sockRef        = null; // referencia global para endpoints HTTP
 
 // ── Servidor HTTP ─────────────────────────────────────────────────────────────
 
@@ -66,6 +67,41 @@ app.get('/qr.png', (req, res) => {
 
 app.get('/status', (req, res) => {
   res.json({ connected: botConnected, group: activeGroupJid });
+});
+
+// Listar todos los grupos disponibles
+app.get('/groups', async (req, res) => {
+  if (!botConnected || !sockRef) return res.status(503).json({ error: 'Bot no conectado aún' });
+  const chats  = await sockRef.groupFetchAllParticipating();
+  const groups = Object.values(chats).map(g => ({ jid: g.id, name: g.subject }));
+  res.json(groups);
+});
+
+// Activar bot en un grupo por nombre exacto (o parcial)
+app.get('/activate', async (req, res) => {
+  if (!botConnected || !sockRef) return res.status(503).json({ error: 'Bot no conectado aún' });
+  const name = req.query.name;
+  if (!name) return res.status(400).json({ error: 'Parámetro ?name= requerido' });
+
+  const chats  = await sockRef.groupFetchAllParticipating();
+  const groups = Object.values(chats).map(g => ({ jid: g.id, name: g.subject }));
+
+  // Buscar por nombre exacto primero, luego parcial (case-insensitive)
+  const match =
+    groups.find(g => g.name === name) ||
+    groups.find(g => g.name.toLowerCase().includes(name.toLowerCase()));
+
+  if (!match) {
+    return res.status(404).json({
+      error: `Grupo "${name}" no encontrado`,
+      grupos_disponibles: groups.map(g => g.name),
+    });
+  }
+
+  activeGroupJid = match.jid;
+  saveGroupJid(match.jid);
+  console.log(`✅ Grupo activado vía HTTP: "${match.name}" | ${match.jid}`);
+  res.json({ ok: true, grupo: match.name, jid: match.jid });
 });
 
 app.listen(PORT, () => console.log(`🌐 Servidor HTTP en puerto ${PORT} → /qr para escanear`));
@@ -188,6 +224,7 @@ async function connect() {
 
     if (connection === 'open') {
       botConnected = true;
+      sockRef      = sock;
       clearQR();
       console.log('\n✅ Bot ANR conectado a WhatsApp');
       activeGroupJid = await selectGroup(sock);
