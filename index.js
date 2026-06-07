@@ -10,7 +10,7 @@ const AUTH_DIR   = process.env.AUTH_DIR || '/app/auth_info';
 const GROUP_FILE = path.join(AUTH_DIR, 'selected_groups.json');
 const QR_FILE    = path.join(AUTH_DIR, 'qr.png');
 const PORT       = process.env.PORT || 3000;
-const CI_REGEX   = /\bci[:\s]*([0-9][.0-9]*[0-9]+)/i;
+const CI_REGEX   = /\bc\.?i\.?[:\s]*([0-9][.0-9]*[0-9]+)/i;
 
 let activeGroups = loadGroupJids();
 if (!activeGroups.length && process.env.GROUP_JID) activeGroups = [process.env.GROUP_JID];
