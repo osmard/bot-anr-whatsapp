@@ -269,10 +269,10 @@ function startClient() {
   });
 
   const handleMessage = async (msg) => {
-    // fromMe=true: msg.from es el LID propio, el grupo está en msg.id.remote
-    const chatId = msg.fromMe ? (msg.id?.remote || '') : msg.from;
+    const chatId = msg.from;
     console.log(`📨 msg: chatId=${chatId} fromMe=${msg.fromMe} body="${(msg.body||'').substring(0,80)}"`);
 
+    if (msg.fromMe) return;
     if (!chatId.endsWith('@g.us')) return;
     if (activeGroupId && chatId !== activeGroupId) {
       console.log(`  ↳ ignorado (grupo distinto: ${chatId} != ${activeGroupId})`);
@@ -304,7 +304,7 @@ function startClient() {
     }
   };
 
-  client.on('message_create', handleMessage);
+  client.on('message', handleMessage);
 
   client.initialize().catch(err => {
     console.error(`❌ initialize error: ${err.message}`);
