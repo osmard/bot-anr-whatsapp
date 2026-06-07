@@ -77,6 +77,22 @@ app.get('/groups', async (req, res) => {
   res.json(groups);
 });
 
+// Enviar mensaje de prueba al grupo activo
+app.get('/send-test', async (req, res) => {
+  if (!botConnected || !sockRef) return res.status(503).json({ error: 'Bot no conectado' });
+  if (!activeGroupJid) return res.status(400).json({ error: 'Ningún grupo activo' });
+  const texto = req.query.msg || '✅ Test de envío OK';
+  try {
+    await Promise.race([
+      sockRef.sendMessage(activeGroupJid, { text: texto }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout 15s')), 15000)),
+    ]);
+    res.json({ ok: true, enviado: texto });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Activar bot en un grupo por nombre exacto (o parcial)
 app.get('/activate', async (req, res) => {
   if (!botConnected || !sockRef) return res.status(503).json({ error: 'Bot no conectado aún' });
@@ -213,6 +229,9 @@ async function connect() {
     auth: state,
     printQRInTerminal: false,
     browser: ['Bot ANR', 'Chrome', '1.0.0'],
+    defaultQueryTimeoutMs: undefined,  // evita init queries Timed Out
+    retryRequestDelayMs: 500,
+    maxMsgRetryCount: 2,
   });
 
   sock.ev.on('creds.update', saveCreds);
