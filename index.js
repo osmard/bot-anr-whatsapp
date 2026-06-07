@@ -83,8 +83,10 @@ app.get('/reset-session', async (req, res) => {
     const files = fs.readdirSync(AUTH_DIR);
     const deleted = [];
     for (const f of files) {
-      if (f === 'selected_group.json') continue; // mantener grupo elegido
-      fs.unlinkSync(path.join(AUTH_DIR, f));
+      if (f === 'selected_group.json') continue;
+      const full = path.join(AUTH_DIR, f);
+      if (fs.statSync(full).isDirectory()) continue; // saltar lost+found y dirs
+      fs.unlinkSync(full);
       deleted.push(f);
     }
     botConnected = false;
