@@ -77,6 +77,27 @@ app.get('/groups', async (req, res) => {
   res.json(groups);
 });
 
+// Limpiar sesión y forzar nuevo QR (no borra selected_group.json)
+app.get('/reset-session', async (req, res) => {
+  try {
+    const files = fs.readdirSync(AUTH_DIR);
+    const deleted = [];
+    for (const f of files) {
+      if (f === 'selected_group.json') continue; // mantener grupo elegido
+      fs.unlinkSync(path.join(AUTH_DIR, f));
+      deleted.push(f);
+    }
+    botConnected = false;
+    sockRef = null;
+    activeGroupJid = null;
+    res.json({ ok: true, deleted, msg: 'Sesión limpiada. Refrescá /qr para escanear el nuevo QR.' });
+    // Reconectar para generar nuevo QR
+    setTimeout(() => connect(), 1000);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Enviar mensaje de prueba al grupo activo
 app.get('/send-test', async (req, res) => {
   if (!botConnected || !sockRef) return res.status(503).json({ error: 'Bot no conectado' });
