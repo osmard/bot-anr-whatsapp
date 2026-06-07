@@ -213,8 +213,6 @@ async function connect() {
     auth: state,
     printQRInTerminal: false,
     browser: ['Bot ANR', 'Chrome', '1.0.0'],
-    // Necesario para que Baileys resuelva reintentos de descifrado
-    getMessage: async () => ({ conversation: '' }),
   });
 
   sock.ev.on('creds.update', saveCreds);
@@ -247,9 +245,13 @@ async function connect() {
     }
   });
 
+  // Debug: loguear cualquier evento de mensajes
+  sock.ev.on('messages.update', (updates) => {
+    console.log(`📝 messages.update count=${updates.length}`);
+  });
+
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     console.log(`📨 messages.upsert type=${type} count=${messages.length}`);
-    if (type !== 'notify') return;
 
     for (const msg of messages) {
       const jid = msg.key.remoteJid;
