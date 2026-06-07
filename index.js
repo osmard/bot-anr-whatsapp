@@ -213,6 +213,8 @@ async function connect() {
     auth: state,
     printQRInTerminal: false,
     browser: ['Bot ANR', 'Chrome', '1.0.0'],
+    // Necesario para que Baileys resuelva reintentos de descifrado
+    getMessage: async () => ({ conversation: '' }),
   });
 
   sock.ev.on('creds.update', saveCreds);
@@ -272,11 +274,16 @@ async function connect() {
           .map((a, i) => buildMessage(a, resultados.length, i))
           .join('\n');
         await sock.sendMessage(jid, { text: respuesta });
+        console.log(`✅ Respuesta enviada para CI ${ciRaw}`);
       } catch (err) {
-        console.error(`❌ Error CI ${ciRaw}:`, err.message);
-        await sock.sendMessage(jid, {
-          text: `❌ CI ${ciRaw.replace(/\./g, '')} no encontrada en el padrón ANR.`,
-        });
+        console.error(`❌ Error procesando CI ${ciRaw}:`, err.message);
+        try {
+          await sock.sendMessage(jid, {
+            text: `❌ CI ${ciRaw.replace(/\./g, '')} no encontrada en el padrón ANR.`,
+          });
+        } catch (sendErr) {
+          console.error(`❌ sendMessage también falló:`, sendErr.message);
+        }
       }
     }
   });
