@@ -278,11 +278,9 @@ async function connect() {
   state.keys.get = async (type, ids) => {
     const result = await origKeysGet(type, ids);
     if (type === 'session') {
-      for (const id of ids) {
-        if (id.endsWith('@lid') && !result[id]) {
-          result[id] = {}; // valor truthy → assertSessions no hace fetch
-        }
-      }
+      const lidIds = ids.filter(id => id.endsWith('@lid') && !result[id]);
+      if (lidIds.length) console.log(`🔑 Saltando ${lidIds.length} sesiones @lid`);
+      for (const id of lidIds) result[id] = {};
     }
     return result;
   };
