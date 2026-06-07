@@ -269,15 +269,15 @@ function startClient() {
   });
 
   const handleMessage = async (msg) => {
-    const chatId = msg.from;
-    console.log(`📨 msg: from=${chatId} fromMe=${msg.fromMe} body="${(msg.body||'').substring(0,80)}"`);
+    // fromMe=true: msg.from es el LID propio, el grupo está en msg.id.remote
+    const chatId = msg.fromMe ? (msg.id?.remote || '') : msg.from;
+    console.log(`📨 msg: chatId=${chatId} fromMe=${msg.fromMe} body="${(msg.body||'').substring(0,80)}"`);
 
     if (!chatId.endsWith('@g.us')) return;
     if (activeGroupId && chatId !== activeGroupId) {
       console.log(`  ↳ ignorado (grupo distinto: ${chatId} != ${activeGroupId})`);
       return;
     }
-    if (msg.fromMe) return;
 
     const text = msg.body || '';
     const match = text.match(CI_REGEX);
@@ -304,7 +304,6 @@ function startClient() {
     }
   };
 
-  client.on('message', handleMessage);
   client.on('message_create', handleMessage);
 
   client.initialize().catch(err => {
