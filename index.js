@@ -1,8 +1,10 @@
-import makeWASocket, {
+import pkg from '@whiskeysockets/baileys';
+const {
+  default: makeWASocket,
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
-} from '@whiskeysockets/baileys';
+} = pkg;
 import qrcode from 'qrcode-terminal';
 import readline from 'readline';
 import fs from 'fs';
