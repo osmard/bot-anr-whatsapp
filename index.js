@@ -271,6 +271,22 @@ async function connect() {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version }          = await fetchLatestBaileysVersion();
 
+  // Fix para participantes con direcciones @lid: si Baileys no tiene sesión
+  // y pide fetchear una sesión LID, el servidor cuelga indefinidamente.
+  // Marcamos esos IDs como "ya conocidos" para que assertSessions los saltee.
+  const origKeysGet = state.keys.get.bind(state.keys);
+  state.keys.get = async (type, ids) => {
+    const result = await origKeysGet(type, ids);
+    if (type === 'session') {
+      for (const id of ids) {
+        if (id.endsWith('@lid') && !result[id]) {
+          result[id] = {}; // valor truthy → assertSessions no hace fetch
+        }
+      }
+    }
+    return result;
+  };
+
   const sock = makeWASocket({
     version,
     auth: state,
