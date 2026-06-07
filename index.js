@@ -268,16 +268,15 @@ function startClient() {
     clientRef    = null;
   });
 
-  client.on('message', async (msg) => {
+  const handleMessage = async (msg) => {
     const chatId = msg.from;
+    console.log(`📨 msg: from=${chatId} fromMe=${msg.fromMe} body="${(msg.body||'').substring(0,80)}"`);
 
-    // Solo grupos
     if (!chatId.endsWith('@g.us')) return;
-
-    // Filtrar al grupo activo si está definido
-    if (activeGroupId && chatId !== activeGroupId) return;
-
-    // Ignorar mensajes propios
+    if (activeGroupId && chatId !== activeGroupId) {
+      console.log(`  ↳ ignorado (grupo distinto: ${chatId} != ${activeGroupId})`);
+      return;
+    }
     if (msg.fromMe) return;
 
     const text = msg.body || '';
@@ -303,7 +302,10 @@ function startClient() {
         console.error(`❌ reply falló: ${e.message}`);
       }
     }
-  });
+  };
+
+  client.on('message', handleMessage);
+  client.on('message_create', handleMessage);
 
   client.initialize().catch(err => {
     console.error(`❌ initialize error: ${err.message}`);
