@@ -248,12 +248,16 @@ async function connect() {
   });
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    console.log(`📨 messages.upsert type=${type} count=${messages.length}`);
     if (type !== 'notify') return;
 
     for (const msg of messages) {
-      if (!msg.message || msg.key.fromMe) continue;
-
       const jid = msg.key.remoteJid;
+      const hasMsg = !!msg.message;
+      const fromMe = msg.key.fromMe;
+      console.log(`  → jid=${jid} fromMe=${fromMe} hasMsg=${hasMsg}`);
+
+      if (!hasMsg || fromMe) continue;
       if (activeGroupJid && jid !== activeGroupJid) continue;
       if (!jid?.endsWith('@g.us')) continue;
 
