@@ -306,6 +306,27 @@ async function connect() {
       botConnected = true;
       sockRef      = sock;
       clearQR();
+
+      // Patch: getUSyncDevices cuelga indefinidamente para participantes @lid.
+      // Si tarda más de 5s, devolvemos {} para que Baileys omita la distribución
+      // individual de claves y envíe igual el skmsg al grupo.
+      if (typeof sock.getUSyncDevices === 'function') {
+        const origUsync = sock.getUSyncDevices.bind(sock);
+        sock.getUSyncDevices = async (...args) => {
+          try {
+            return await Promise.race([
+              origUsync(...args),
+              new Promise((_, rej) =>
+                setTimeout(() => rej(new Error('usync timeout 5s')), 5000)
+              ),
+            ]);
+          } catch (err) {
+            console.log(`⚠️ getUSyncDevices: ${err.message} — omitiendo distribución individual`);
+            return {};
+          }
+        };
+        console.log('🔧 Patch getUSyncDevices aplicado');
+      }
       console.log('\n✅ Bot ANR conectado a WhatsApp');
       activeGroupJid = await selectGroup(sock);
       if (activeGroupJid) {
