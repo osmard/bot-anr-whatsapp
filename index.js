@@ -7,28 +7,32 @@ import path from 'path';
 import { consultarCI } from './scraper.js';
 
 const AUTH_DIR   = process.env.AUTH_DIR || '/app/auth_info';
-const GROUP_FILE = path.join(AUTH_DIR, 'selected_group.json');
+const GROUP_FILE = path.join(AUTH_DIR, 'selected_groups.json');
 const QR_FILE    = path.join(AUTH_DIR, 'qr.png');
 const PORT       = process.env.PORT || 3000;
 const CI_REGEX   = /\bci[:\s]*([0-9][.0-9]*[0-9]+)/i;
 
-let activeGroupId = process.env.GROUP_JID || loadGroupJid();
+let activeGroups = loadGroupJids();
+if (!activeGroups.length && process.env.GROUP_JID) activeGroups = [process.env.GROUP_JID];
 let botConnected  = false;
 let clientRef     = null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function saveGroupJid(jid) {
+function saveGroupJids(jids) {
   fs.mkdirSync(AUTH_DIR, { recursive: true });
-  fs.writeFileSync(GROUP_FILE, JSON.stringify({ jid }));
+  fs.writeFileSync(GROUP_FILE, JSON.stringify({ jids }));
 }
 
-function loadGroupJid() {
+function loadGroupJids() {
   try {
-    const { jid } = JSON.parse(fs.readFileSync(GROUP_FILE, 'utf8'));
-    return jid || null;
+    const data = JSON.parse(fs.readFileSync(GROUP_FILE, 'utf8'));
+    // compatibilidad con formato anterior { jid }
+    if (data.jids) return data.jids;
+    if (data.jid)  return [data.jid];
+    return [];
   } catch {
-    return null;
+    return [];
   }
 }
 
@@ -103,7 +107,7 @@ app.get('/qr.png', (req, res) => {
 });
 
 app.get('/status', (req, res) => {
-  res.json({ connected: botConnected, group: activeGroupId });
+  res.json({ connected: botConnected, groups: activeGroups });
 });
 
 app.get('/groups', async (req, res) => {
@@ -120,15 +124,20 @@ app.get('/groups', async (req, res) => {
 });
 
 app.get('/group-info', async (req, res) => {
-  if (!botConnected || !clientRef || !activeGroupId) return res.status(503).json({ error: 'Bot no conectado o sin grupo' });
+  if (!botConnected || !clientRef || !activeGroups.length) return res.status(503).json({ error: 'Bot no conectado o sin grupos' });
   try {
-    const chat = await clientRef.getChatById(activeGroupId);
-    res.json({ name: chat.name, id: chat.id._serialized, participants: chat.participants?.length });
+    const info = await Promise.all(activeGroups.map(async id => {
+      const chat = await clientRef.getChatById(id);
+      return { name: chat.name, id: chat.id._serialized };
+    }));
+    res.json(info);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
+// /activate?name=X  → agrega el grupo a la lista activa
+// /deactivate?name=X → lo quita
 app.get('/activate', async (req, res) => {
   if (!botConnected || !clientRef) return res.status(503).json({ error: 'Bot no conectado aún' });
   const name = req.query.name;
@@ -140,10 +149,32 @@ app.get('/activate', async (req, res) => {
       groups.find(g => g.name === name) ||
       groups.find(g => g.name.toLowerCase().includes(name.toLowerCase()));
     if (!match) return res.status(404).json({ error: `Grupo "${name}" no encontrado`, grupos_disponibles: groups.map(g => g.name) });
-    activeGroupId = match.id;
-    saveGroupJid(match.id);
+    if (!activeGroups.includes(match.id)) {
+      activeGroups.push(match.id);
+      saveGroupJids(activeGroups);
+    }
     console.log(`✅ Grupo activado vía HTTP: "${match.name}" | ${match.id}`);
-    res.json({ ok: true, grupo: match.name, id: match.id });
+    res.json({ ok: true, grupo: match.name, id: match.id, grupos_activos: activeGroups });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/deactivate', async (req, res) => {
+  if (!botConnected || !clientRef) return res.status(503).json({ error: 'Bot no conectado aún' });
+  const name = req.query.name;
+  if (!name) return res.status(400).json({ error: 'Parámetro ?name= requerido' });
+  try {
+    const chats  = await clientRef.getChats();
+    const groups = chats.filter(c => c.isGroup).map(g => ({ id: g.id._serialized, name: g.name }));
+    const match  =
+      groups.find(g => g.name === name) ||
+      groups.find(g => g.name.toLowerCase().includes(name.toLowerCase()));
+    if (!match) return res.status(404).json({ error: `Grupo "${name}" no encontrado` });
+    activeGroups = activeGroups.filter(id => id !== match.id);
+    saveGroupJids(activeGroups);
+    console.log(`🔴 Grupo desactivado: "${match.name}"`);
+    res.json({ ok: true, grupo: match.name, grupos_activos: activeGroups });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -151,12 +182,13 @@ app.get('/activate', async (req, res) => {
 
 app.get('/send-test', async (req, res) => {
   if (!botConnected || !clientRef) return res.status(503).json({ error: 'Bot no conectado' });
-  if (!activeGroupId) return res.status(400).json({ error: 'Ningún grupo activo' });
-  const texto = req.query.msg || '✅ Test de envío OK';
+  if (!activeGroups.length) return res.status(400).json({ error: 'Ningún grupo activo' });
+  const texto  = req.query.msg || '✅ Test de envío OK';
+  const target = req.query.id || activeGroups[0];
   try {
-    const chat = await clientRef.getChatById(activeGroupId);
+    const chat = await clientRef.getChatById(target);
     await chat.sendMessage(texto);
-    res.json({ ok: true, enviado: texto });
+    res.json({ ok: true, enviado: texto, grupo: target });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -238,17 +270,10 @@ function startClient() {
     clearQR();
     console.log('\n✅ Bot ANR conectado a WhatsApp');
 
-    // Cargar grupo guardado o buscar por nombre
-    if (!activeGroupId) {
-      const saved = loadGroupJid();
-      if (saved) {
-        activeGroupId = saved;
-        console.log(`✅ Grupo cargado desde sesión anterior: ${saved}`);
-      } else {
-        await autoActivateGroup(client);
-      }
+    if (activeGroups.length) {
+      console.log(`✅ Grupos activos: ${activeGroups.join(', ')}`);
     } else {
-      console.log(`✅ Grupo activo: ${activeGroupId}`);
+      await autoActivateGroup(client);
     }
 
     console.log('\n🟢 Bot escuchando mensajes.\n');
@@ -274,8 +299,8 @@ function startClient() {
 
     if (msg.fromMe) return;
     if (!chatId.endsWith('@g.us')) return;
-    if (activeGroupId && chatId !== activeGroupId) {
-      console.log(`  ↳ ignorado (grupo distinto: ${chatId} != ${activeGroupId})`);
+    if (activeGroups.length && !activeGroups.includes(chatId)) {
+      console.log(`  ↳ ignorado (grupo no activo: ${chatId})`);
       return;
     }
 
@@ -329,18 +354,9 @@ async function autoActivateGroup(client) {
       return;
     }
 
-    // Intentar activar "LISTA 2P opcion 3" automáticamente
-    const target = groups.find(g => g.name.toLowerCase().includes('lista 2p'));
-    if (target) {
-      activeGroupId = target.id;
-      saveGroupJid(target.id);
-      console.log(`✅ Grupo auto-activado: "${target.name}" | ${target.id}`);
-      return;
-    }
-
     console.log('\n📋 GRUPOS DISPONIBLES:');
     groups.forEach((g, i) => console.log(`  ${i + 1}. ${g.name}`));
-    console.log('\nUsá /activate?name=<nombre> para activar un grupo.');
+    console.log('\nUsá /activate?name=<nombre> para activar grupos.');
   } catch (err) {
     console.error(`❌ autoActivateGroup: ${err.message}`);
   }
